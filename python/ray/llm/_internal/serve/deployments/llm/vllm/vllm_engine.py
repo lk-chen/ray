@@ -20,6 +20,8 @@ from ray.llm._internal.serve.configs.openai_api_models import (
     EmbeddingRequest,
     EmbeddingResponse,
     ErrorResponse,
+    ScoreRequest,
+    ScoreResponse,
 )
 from ray.llm._internal.serve.configs.server_models import (
     DiskMultiplexConfig,
@@ -44,6 +46,7 @@ if TYPE_CHECKING:
     from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
     from vllm.entrypoints.openai.serving_embedding import OpenAIServingEmbedding
     from vllm.entrypoints.openai.serving_models import OpenAIServingModels
+    from vllm.entrypoints.openai.serving_scores import OpenAIServingScores
 
 vllm = try_import("vllm")
 logger = get_logger(__name__)
@@ -162,6 +165,7 @@ class VLLMEngine(LLMEngine):
         self._oai_serving_chat: Optional["OpenAIServingChat"] = None
         self._oai_serving_completion: Optional["OpenAIServingCompletion"] = None
         self._oai_serving_embedding: Optional["OpenAIServingEmbedding"] = None
+        self._oai_serving_scores: Optional["OpenAIServingScores"] = None
 
     async def start(self) -> None:
         """Start the vLLM engine.
@@ -217,6 +221,7 @@ class VLLMEngine(LLMEngine):
         self._oai_serving_chat = state.openai_serving_chat
         self._oai_serving_completion = state.openai_serving_completion
         self._oai_serving_embedding = state.openai_serving_embedding
+        self._oai_serving_scores = state.openai_serving_scores
 
         self._validate_openai_serving_models()
         self._validate_engine_client()
@@ -382,7 +387,9 @@ class VLLMEngine(LLMEngine):
 
     def _create_raw_request(
         self,
-        request: Union[CompletionRequest, ChatCompletionRequest, EmbeddingRequest],
+        request: Union[
+            CompletionRequest, ChatCompletionRequest, EmbeddingRequest, ScoreRequest
+        ],
         path: str,
     ) -> Request:
         scope = {
@@ -478,3 +485,27 @@ class VLLMEngine(LLMEngine):
         except BaseException as e:
             logger.error("Healthcheck failed. The replica will be restarted")
             raise e from None
+
+    def _validate_openai_serving_scores(self):
+        assert (
+            self._oai_serving_scores is not None
+        ), "oai_serving_scores is not initialized"
+        assert hasattr(
+            self._oai_serving_scores, "create_score"
+        ), "oai_serving_scores must have a create_score attribute"
+
+    async def score(
+        self, request: ScoreRequest
+    ) -> AsyncGenerator[Union[ScoreResponse, ErrorResponse], None]:
+        self._validate_openai_serving_scores()
+
+        raw_request = self._create_raw_request(request, "/score")
+
+        score_response = await self._oai_serving_scores.create_score(
+            request, raw_request=raw_request
+        )
+
+        if isinstance(score_response, VLLMErrorResponse):
+            yield ErrorResponse(**score_response.model_dump())
+        else:
+            yield ScoreResponse(**score_response.model_dump())

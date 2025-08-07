@@ -22,6 +22,8 @@ from vllm.entrypoints.openai.protocol import (
     EmbeddingCompletionRequest as vLLMEmbeddingCompletionRequest,
     EmbeddingResponse as vLLMEmbeddingResponse,
     ErrorResponse as vLLMErrorResponse,
+    ScoreRequest as vLLMScoreRequest,
+    ScoreResponse as vLLMScoreResponse,
 )
 from vllm.utils import random_uuid
 
@@ -175,3 +177,16 @@ def to_model_metadata(
         permission=[],
         metadata=metadata,
     )
+
+
+class ScoreRequest(vLLMScoreRequest):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class ScoreResponse(vLLMScoreResponse):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+LLMScoreResponse = Union[
+    AsyncGenerator[Union[ScoreResponse, ErrorResponse], None],
+]

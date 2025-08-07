@@ -13,6 +13,8 @@ from ray.llm._internal.serve.configs.openai_api_models import (
     EmbeddingRequest,
     EmbeddingResponse,
     ErrorResponse,
+    ScoreRequest,
+    ScoreResponse,
 )
 from ray.llm._internal.serve.configs.server_models import (
     DiskMultiplexConfig,
@@ -117,6 +119,19 @@ class MockVLLMEngine(LLMEngine):
                 "prompt_tokens": len(str(request.input).split()),
                 "total_tokens": len(str(request.input).split()),
             },
+        )
+        yield response
+
+    async def score(
+        self, request: ScoreRequest
+    ) -> AsyncGenerator[Union[ScoreResponse, ErrorResponse], None]:
+        """Mock score generation."""
+        if not self.started:
+            raise RuntimeError("Engine not started")
+
+        response = ScoreResponse(
+            request_id=request.request_id,
+            score=random.random(),
         )
         yield response
 
