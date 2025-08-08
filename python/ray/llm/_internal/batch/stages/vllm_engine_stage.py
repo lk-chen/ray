@@ -491,6 +491,9 @@ class vLLMEngineStageUDF(StatefulStageUDF):
                 f"{math.ceil(max_num_seqs / batch_size)}."
             )
 
+        self.num_ongoing_batches = 0
+        self.num_ongoing_rows = 0
+
     def normalize_engine_kwargs(
         self,
         task_type: vLLMTaskType,
@@ -541,6 +544,9 @@ class vLLMEngineStageUDF(StatefulStageUDF):
         batch_uuid = uuid.uuid4()
         t = time.perf_counter()
 
+        self.num_ongoing_batches += 1
+        self.num_ongoing_rows += len(batch)
+
         tasks = [asyncio.create_task(self.llm.generate_async(row)) for row in batch]
 
         time_taken = -1.0
@@ -548,6 +554,8 @@ class vLLMEngineStageUDF(StatefulStageUDF):
             request, output = await resp
             time_taken = time.perf_counter() - t
 
+            self.num_ongoing_rows -= 1
+            logger.info(f"{self.num_ongoing_batches=} {self.num_ongoing_rows=}")
             yield {
                 **output,
                 "request_id": request.request_id,
@@ -565,6 +573,8 @@ class vLLMEngineStageUDF(StatefulStageUDF):
             len(batch),
             time_taken,
         )
+
+        self.num_ongoing_batches -= 1
 
         # Log engine stats after each batch is done conditioned on the flag
         # passed to the engine.
