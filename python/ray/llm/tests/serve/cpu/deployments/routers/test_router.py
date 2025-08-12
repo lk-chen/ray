@@ -115,6 +115,47 @@ class TestRouter:
         expected_text = " ".join([f"test_{i}" for i in range(n_tokens)])
         assert text.strip() == expected_text
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("stream", [True, False])
+    async def test_tool_call(self, client, stream):
+        """Tests streaming/non-streaming tool calls.
+
+        Tool call messages should be handled correctly.
+        """
+        with pytest.raises(openai.InternalServerError) as exc_info:
+            _ = client.chat.completions.create(
+                model="llm_model_id",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "Can you tell me what the temperate will be in Dallas, in fahrenheit?",
+                    },
+                    {
+                        "content": None,
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "id": "RBS92VTjJ",
+                                "function": {
+                                    "arguments": '{"city": "Dallas", "state": "TX", "unit": "fahrenheit"}',
+                                    "name": "get_current_weather",
+                                },
+                                "type": "function",
+                            }
+                        ],
+                    },
+                    {
+                        "role": "tool",
+                        "content": "The weather in Dallas, TX is 85 degrees fahrenheit. It is partly cloudly, with highs in the 90's.",
+                        "tool_call_id": "n3OMUpydP",
+                    }
+                ],
+                stream=stream,
+                max_tokens=200,
+            )
+            assert "cannot pickle" in str(exc_info.value)
+            assert "ValidatorIterator" in str(exc_info.value)
+
     def test_router_with_num_router_replicas_config(self):
         """Test the router with num_router_replicas config."""
         # Test with no num_router_replicas config.
